@@ -1,24 +1,23 @@
 import os
+import asyncio
 from pyrogram import Client
 from plugins import start, instagram
 from aiohttp import web
-from plugins.webcode import bot_run  # optional if you have a ping route
 
-PORT_CODE = int(os.environ.get("PORT", "8080"))
+# Load environment variables
+API_ID = int(os.environ.get("API_ID"))
+API_HASH = os.environ.get("API_HASH")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+PORT = int(os.environ.get("PORT", "8080"))
 
 class Bot:
     def __init__(self):
-        # Load environment variables
-        self.api_id = int(os.environ.get("API_ID"))
-        self.api_hash = os.environ.get("API_HASH")
-        self.bot_token = os.environ.get("BOT_TOKEN")
-
         # Initialize Pyrogram client
         self.app = Client(
             "insta_downloader_bot",
-            api_id=self.api_id,
-            api_hash=self.api_hash,
-            bot_token=self.bot_token
+            api_id=API_ID,
+            api_hash=API_HASH,
+            bot_token=BOT_TOKEN
         )
 
         # Register plugins
@@ -29,7 +28,7 @@ class Bot:
         instagram.register(self.app)
 
     async def start_webserver(self):
-        # Simple webserver to keep Koyeb alive
+        """Start a simple webserver for Koyeb uptime checks."""
         async def handle(request):
             return web.Response(text="Bot is running 🤖")
 
@@ -37,23 +36,26 @@ class Bot:
         server.add_routes([web.get("/", handle)])
         runner = web.AppRunner(server)
         await runner.setup()
-        site = web.TCPSite(runner, "0.0.0.0", PORT_CODE)
+        site = web.TCPSite(runner, "0.0.0.0", PORT)
         await site.start()
-        print(f"🌐 Webserver running on port {PORT_CODE}")
+        print(f"🌐 Webserver running on port {PORT}")
 
-    async def run_bot(self):
-        # Start bot and webserver concurrently
-        import asyncio
-        await asyncio.gather(
-            self.app.start(),
-            self.start_webserver()
-        )
+    async def run(self):
+        """Run both bot and webserver concurrently."""
+        await self.app.start()
         print("🤖 Bot started!")
 
-        # Keep the bot running
-        await self.app.idle()
+        # Run webserver concurrently
+        await self.start_webserver()
+
+        # Keep the bot alive
+        try:
+            while True:
+                await asyncio.sleep(3600)  # sleep in a loop
+        finally:
+            await self.app.stop()
+            print("🤖 Bot stopped.")
 
 if __name__ == "__main__":
-    import asyncio
     bot = Bot()
-    asyncio.run(bot.run_bot())
+    asyncio.run(bot.run())
