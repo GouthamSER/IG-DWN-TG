@@ -18,4 +18,5 @@ ENV API_HASH=your_api_hash
 ENV BOT_TOKEN=your_bot_token
 
 # Start the bot
-CMD ["python", "bot.py"]
+CMD ["python", "main.py"]
+
