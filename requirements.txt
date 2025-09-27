@@ -1,5 +1,6 @@
-pyrogram==2.0.108
-tgcrypto==1.4.9
-requests==2.31.0
-httpx==0.26.1
-aiohttp==3.9.3
+pyrogram
+tgcrypto
+requests
+httpx
+aiohttp
+
