@@ -5,7 +5,6 @@
 A Telegram bot to download Instagram photos and videos in HD, built with **Pyrogram** and modular plugins. Includes a lightweight web server to keep the bot alive on cloud platforms like **Koyeb**.
 
 ---
-
 ## Features
 
 - Download Instagram photos and videos in HD
@@ -15,6 +14,11 @@ A Telegram bot to download Instagram photos and videos in HD, built with **Pyrog
 - Environment variables for secure credentials
 
 ---
+
+- **3) Deploy to Koyeb**
+
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?name=ig-dws-tg&type=git&repository=GouthamSER%2FIG-DWD-TG&branch=main&build_command=pip+install+-r+requiremnets.txt&run_command=python+main.js&instance_type=free&regions=fra&instances_min=0&autoscaling_sleep_idle_delay=3600)
+<br> <br> 
 
 ## Folder Structure
 your_bot/
@@ -28,6 +32,7 @@ your_bot/
 └── README.md
 
 ---
+
 
 ## Requirements
 
