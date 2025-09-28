@@ -1,4 +1,4 @@
-
+# © COPYRIGHT TO https://github.com/GouthamSER
 import os
 from pyrogram import Client
 from plugins import start, instagram
@@ -46,3 +46,4 @@ bot = Bot(
 
 if __name__ == "__main__":
     bot.run()
+
