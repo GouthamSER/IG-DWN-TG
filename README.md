@@ -2,6 +2,8 @@
 
 # Instagram Downloader Bot
 
+STORY, IG REEL, POST, STORY PUBLIC DOWNLOAD
+
 A Telegram bot to download Instagram photos and videos in HD, built with **Pyrogram** and modular plugins. Includes a lightweight web server to keep the bot alive on cloud platforms like **Koyeb**.
 
 ---
@@ -17,41 +19,9 @@ A Telegram bot to download Instagram photos and videos in HD, built with **Pyrog
 
 - **3) Deploy to Koyeb**
 
-[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?name=ig-dws-tg&type=git&repository=GouthamSER%2FIG-DWD-TG&branch=main&build_command=pip+install+-r+requiremnets.txt&run_command=python+main.js&instance_type=free&regions=fra&instances_min=0&autoscaling_sleep_idle_delay=3600)
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?name=ig-dwn-tg&type=git&repository=GouthamSER%2FIG-DWN-TG&branch=main&build_command=pip+install+-r+requiremnets.txt&run_command=python+main.js&instance_type=free&regions=fra&instances_min=0&autoscaling_sleep_idle_delay=3600)
 <br> <br> 
 
-## Folder Structure
-your_bot/
-├── bot.py # Main bot class and runner
-├── plugins/
-│ ├── start.py # /start command
-│ ├── instagram.py # Instagram download handler
-│ └── webcode.py # Optional webserver routes
-├── requirements.txt # Python dependencies
-├── runtime.txt # Python runtime for Koyeb
-└── README.md
-
----
 
 
-## Requirements
-
-- Python 3.12+
-- Pyrogram v2
-- tgcrypto
-- requests / httpx
-- aiohttp
-
----
-
-### `requirements.txt`
-
-```pyrogram==2.0.108
-tgcrypto==1.4.9
-requests==2.31.0
-httpx==0.26.1
-aiohttp==3.9.3
-```
-
-`This `README.md` is ready to be included in your GitHub repo and clearly documents the project for anyone using or deploying it.`
-
+<h5> © COPYRIGHT TO <a href='https://github.com/GouthamSER'>GouthamSER</a></h5>
