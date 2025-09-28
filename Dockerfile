@@ -1,3 +1,4 @@
+# © COPYRIGHT TO https://github.com/GouthamSER
 # Base image
 FROM python:3.10-slim
 
@@ -19,4 +20,5 @@ ENV BOT_TOKEN=your_bot_token
 
 # Start the bot
 CMD ["python", "main.py"]
+
 
