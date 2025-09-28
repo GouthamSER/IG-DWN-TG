@@ -3,4 +3,6 @@ tgcrypto
 requests
 httpx
 aiohttp
-
+# © COPYRIGHT TO https://github.com/GouthamSER
+# © COPYRIGHT TO https://github.com/GouthamSER
+# © COPYRIGHT TO https://github.com/GouthamSER
