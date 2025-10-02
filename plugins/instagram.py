@@ -1,4 +1,27 @@
+import httpx
+from pyrogram import filters, Client
+from pyrogram.handlers import MessageHandler
 from pyrogram.types import InputMediaPhoto, InputMediaVideo
+
+
+async def download_instagram_media(insta_url: str):
+    """Fetch media list from mediadl API (async)."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://www.mediadl.app/api/download",
+            json={"url": insta_url, "hd": True},
+            timeout=30
+        )
+        data = resp.json()
+
+    if resp.status_code != 200 or "error" in data:
+        raise Exception(data.get("error", f"API request failed [{resp.status_code}]"))
+
+    if "medias" in data and len(data["medias"]) > 0:
+        return data["medias"]
+
+    raise Exception("No media found in response")
+
 
 async def handle_link(client: Client, message):
     if "instagram.com" not in message.text:
@@ -22,7 +45,7 @@ async def handle_link(client: Client, message):
                     media_group.append(InputMediaPhoto(m["url"]))
             await client.send_media_group(chat_id=message.chat.id, media=media_group)
 
-        # Case 2: Mixed or only videos → send individually
+        # Case 2: Mixed (photos + videos) or only videos → send individually
         else:
             for m in medias:
                 media_url = m["url"]
@@ -47,3 +70,7 @@ async def handle_link(client: Client, message):
 
     except Exception as e:
         await msg.edit(f"❌ Failed: {str(e)}")
+
+
+def register(app: Client):
+    app.add_handler(MessageHandler(handle_link, filters.private & filters.text))
