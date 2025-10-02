@@ -2,6 +2,9 @@
 
 # Instagram Downloader Bot
 
+WELL MAINTAINED KOYEB SUPPORTED ..... 
+VPS RUNNING .....
+
 STORY, IG REEL, POST, STORY PUBLIC DOWNLOAD
 
 A Telegram bot to download Instagram photos and videos in HD, built with **Pyrogram** and modular plugins. Includes a lightweight web server to keep the bot alive on cloud platforms like **Koyeb**.
