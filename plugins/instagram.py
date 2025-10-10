@@ -1,11 +1,13 @@
-# GOUTHAMSER ALL RIGHT RESERVED !!!!!!!!!!!!!!-------------------------------------
+# GOUTHAMSER ALL RIGHT RESERVED !!!!!!!!!!!!!!
+
 import httpx
 import asyncio
 from io import BytesIO
-from pyrogram import filters, Client
-from pyrogram.handlers import MessageHandler
-from pyrogram.types import InputMediaPhoto, InputMediaVideo
+from pyrogram import filters
+from pyrogram.types import InputMediaPhoto, InputMediaVideo, Message
+from main import bot  # Import the bot instance
 
+# ------------------- Helper Functions -------------------
 
 async def download_instagram_media(insta_url: str):
     """Fetch media list from mediadl API (async) with robust error handling."""
@@ -15,7 +17,6 @@ async def download_instagram_media(insta_url: str):
             json={"url": insta_url, "hd": True},
             timeout=30
         )
-
         try:
             data = resp.json()
         except Exception:
@@ -42,10 +43,12 @@ async def _fetch_bytes(url: str) -> bytes:
         return r.content
 
 
-async def handle_link(client: Client, message):
-    # Support link in either text or caption
-    content = (getattr(message, "text", None) or getattr(message, "caption", None) or "")
-    if "instagram.com" not in content:
+# ------------------- Command Handler -------------------
+
+@bot.on_message(filters.private & filters.text)
+async def instagram_handler(client, message: Message):
+    content = getattr(message, "text", "") or getattr(message, "caption", "")
+    if "instagram.com" not in content.lower():
         return
 
     status_msg = await message.reply(f"🔄 Downloading in HD...\n🔗 {content}")
@@ -55,13 +58,13 @@ async def handle_link(client: Client, message):
         photos = [m for m in medias if m.get("type", "").lower() in ("photo", "image")]
         videos = [m for m in medias if m.get("type", "").lower() == "video"]
 
-        # Safe senders (fallback to file upload if Telegram blocks URL)
         async def safe_send_photo(chat_id, url, caption=None):
             try:
                 await client.send_photo(chat_id=chat_id, photo=url, caption=caption)
             except Exception:
                 b = await _fetch_bytes(url)
-                bio = BytesIO(b); bio.name = "image.jpg"
+                bio = BytesIO(b)
+                bio.name = "image.jpg"
                 await client.send_photo(chat_id=chat_id, photo=bio, caption=caption)
 
         async def safe_send_video(chat_id, url, caption=None):
@@ -69,7 +72,8 @@ async def handle_link(client: Client, message):
                 await client.send_video(chat_id=chat_id, video=url, caption=caption)
             except Exception:
                 b = await _fetch_bytes(url)
-                bio = BytesIO(b); bio.name = "video.mp4"
+                bio = BytesIO(b)
+                bio.name = "video.mp4"
                 await client.send_video(chat_id=chat_id, video=bio, caption=caption)
 
         MAX_GROUP = 10  # Telegram media-group limit
@@ -108,8 +112,10 @@ async def handle_link(client: Client, message):
             for i, m in enumerate(medias):
                 url = m.get("url")
                 t = m.get("type", "").lower()
-                cap = "🎥 Downloaded from Instagram!" if t == "video" and i == 0 else None
-                if t in ("photo", "image") and i == 0:
+                cap = None
+                if t == "video" and i == 0:
+                    cap = "🎥 Downloaded from Instagram!"
+                elif t in ("photo", "image") and i == 0:
                     cap = "📸 Downloaded from Instagram!"
                 if t == "video":
                     tasks.append(safe_send_video(message.chat.id, url, caption=cap))
@@ -121,10 +127,3 @@ async def handle_link(client: Client, message):
 
     except Exception as e:
         await status_msg.edit(f"❌ Failed: {e}\n🔗 {content}")
-
-
-def register(app: Client):
-    app.add_handler(MessageHandler(handle_link, filters.private & filters.text))
-
-
-# GOUTHAMSER ALL RIGHT RESERVED !!!!!!!!!!!!!!-------------------------------------
