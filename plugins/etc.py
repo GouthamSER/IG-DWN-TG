@@ -3,12 +3,12 @@ import sys
 import psutil
 import platform
 import time
+from datetime import datetime
 from pyrogram import filters, __version__ as pyrogram_version
 from pyrogram.types import Message
 from pyrogram.handlers import MessageHandler
-from datetime import datetime
 
-# Load admin ID
+# Admin ID
 ADMIN_ID = int(os.getenv("ADMIN_ID", "6108995220"))
 
 # Track bot start time and message count
@@ -17,24 +17,20 @@ MESSAGE_COUNT = 0
 
 
 def format_uptime(seconds: int) -> str:
-    """Convert uptime seconds into D:H:M:S format"""
     days, seconds = divmod(seconds, 86400)
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
     parts = []
-    if days:
-        parts.append(f"{days}d")
-    if hours:
-        parts.append(f"{hours}h")
-    if minutes:
-        parts.append(f"{minutes}m")
+    if days: parts.append(f"{days}d")
+    if hours: parts.append(f"{hours}h")
+    if minutes: parts.append(f"{minutes}m")
     parts.append(f"{seconds}s")
     return " ".join(parts)
 
 
 # ---------- Handlers ---------- #
 
-async def count_messages(_: "Client", __: Message):
+async def count_messages(_, __: Message):
     """Increment message counter for every non-service message."""
     global MESSAGE_COUNT
     MESSAGE_COUNT += 1
@@ -63,7 +59,7 @@ async def status_command(_, message: Message):
         f"💬 **Messages Handled:** `{MESSAGE_COUNT}`\n"
         f"🧠 **Memory Usage:** `{mem_info:.2f} MB`\n"
         f"💾 **CPU Usage:** `{cpu_usage:.1f}%`\n"
-        f"🌐 **Platform:** `{platform.system()}` (Koyeb)\n"
+        f"🌐 **Platform:** `{platform.system()}`\n"
         f"⚙️ **Pyrogram Version:** `{pyrogram_version}`"
     )
 
@@ -71,7 +67,7 @@ async def status_command(_, message: Message):
 
 
 async def ping_command(_, message: Message):
-    """Public /ping command — shows latency."""
+    """Public ping command."""
     start = datetime.now()
     reply = await message.reply_text("🏓 Pinging...")
     latency = (datetime.now() - start).microseconds / 1000
@@ -82,14 +78,7 @@ async def ping_command(_, message: Message):
 
 def register(app):
     """Attach all handlers to the bot instance."""
-    # Message counter (for all)
     app.add_handler(MessageHandler(count_messages, filters.all & ~filters.service))
-
-    # Admin-only restart command
     app.add_handler(MessageHandler(restart_command, filters.command("restart") & filters.user(ADMIN_ID)))
-
-    # Public status command
     app.add_handler(MessageHandler(status_command, filters.command("status")))
-
-    # Public ping command
     app.add_handler(MessageHandler(ping_command, filters.command("ping")))
