@@ -1,11 +1,13 @@
-from pyrogram import filters
+# © GouthamSER — All Rights Reserved
+from pyrogram import Client, filters
 from pyrogram.types import Message
 
-def register(bot):
-    @bot.on_message(filters.command("start") & filters.private)
-    async def start_command(client, message: Message):
-        await message.reply(
-            "👋 Hello! I am your Instagram Downloader Bot.\n\n"
-            "📥 Send me an Instagram link, and I will download the media in HD.\n"
-            "✅ Make sure the link is valid and public."
-        )
+
+@Client.on_message(filters.command("start") & filters.private)
+async def start_command(client, message: Message):
+    await message.reply(
+        "👋 **Hello! I'm your Instagram Downloader Bot.**\n\n"
+        "📥 Just send me an Instagram link — photo, video, or reel — "
+        "and I’ll fetch it for you in HD quality.\n\n"
+        "✅ *Make sure the link is valid and public.*"
+    )
