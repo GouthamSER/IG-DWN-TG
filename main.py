@@ -2,7 +2,7 @@
 import os
 import asyncio
 from pyrogram import Client
-from plugins import start, instagram
+from plugins import start, instagram, etc
 from plugins.webcode import bot_run
 from aiohttp import web as webserver
 
@@ -31,6 +31,7 @@ class Bot(Client):
         # Register plugins
         start.register(self)
         instagram.register(self)
+        etc.register(self)
 
         # Setup aiohttp webserver
         app = await bot_run()  # must return aiohttp.web.Application
@@ -68,4 +69,5 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         print("Bot stopped manually.")
+
 
