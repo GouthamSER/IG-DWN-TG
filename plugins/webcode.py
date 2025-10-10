@@ -1,4 +1,5 @@
 from aiohttp import web as webserver
+from main import bot
 
 routes = webserver.RouteTableDef()
 
@@ -10,4 +11,5 @@ async def bot_run():
 @routes.get("/", allow_head=True)
 async def root_route_handler(request):
     return webserver.json_response("IGDW Bot ")
+
  
