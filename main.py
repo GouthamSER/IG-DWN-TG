@@ -11,7 +11,7 @@ API_ID = int(os.getenv("API_ID", 0))
 API_HASH = os.getenv("API_HASH", "")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 PORT = int(os.getenv("PORT", "8080"))
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0)  # 👈 Add this to your Koyeb environment
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))  # 👈 Add this to your Koyeb environment
 
 class Bot(Client):
     def __init__(self):
@@ -68,3 +68,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         print("Bot stopped manually.")
+
