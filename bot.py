@@ -1,16 +1,15 @@
 import os
-import asyncio
 import psutil
 import shutil
 import aiohttp
 import uuid
-from pyrogram import Client, filters, idle
+from pyrogram import Client, filters
 
 # ----------------- Config -----------------
-API_ID = int(os.getenv("API_ID", 18979569))
-API_HASH = os.getenv("API_HASH", "45db354387b8122bdf6c1b0beef93743")
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7383836546:AAHnsD7iK4uVIfZueHAzyQ4Cl6OMnts6EWg")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 6108995220))
+API_ID = int(os.getenv("API_ID", 0))
+API_HASH = os.getenv("API_HASH", "")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
 # Folder to store downloads
 DOWNLOAD_DIR = "downloads"
@@ -35,7 +34,7 @@ def measure_ping() -> str:
 async def download_instagram_video(url: str, msg=None) -> str | None:
     """
     Async download Instagram video with live progress.
-    Generates a unique filename to allow multiple simultaneous downloads.
+    Unique filename to allow multiple simultaneous downloads.
     """
     try:
         if "instagram.com" not in url:
@@ -70,27 +69,27 @@ async def download_instagram_video(url: str, msg=None) -> str | None:
         return None
 
 # ---------------- Commands ----------------
-@bot.on_message(filters.command("start"))
+@bot.on_message(filters.private & filters.command("start"))
 async def start(_, msg):
     await msg.reply_text(
         "👋 Hi! Send me any Instagram video link and I’ll send you the HD video!\n\n"
         "Commands:\n/ping\n/status"
     )
 
-@bot.on_message(filters.command("ping"))
+@bot.on_message(filters.private & filters.command("ping"))
 async def ping(_, msg):
     await msg.reply_text(measure_ping())
 
-@bot.on_message(filters.command("status"))
+@bot.on_message(filters.private & filters.command("status"))
 async def status(_, msg):
     await msg.reply_text(get_system_status())
 
-@bot.on_message(filters.text & ~filters.command(["start", "ping", "status"]))
+@bot.on_message(filters.private & ~filters.command(["start", "ping", "status"]))
 async def handle_instagram(_, msg):
     url = msg.text.strip()
     if "instagram.com" not in url:
         return await msg.reply_text("❌ Please send a valid Instagram URL.")
-    
+
     m = await msg.reply_text("📥 Starting download...")
     filename = await download_instagram_video(url, m)
     if not filename:
@@ -100,17 +99,20 @@ async def handle_instagram(_, msg):
     os.remove(filename)  # automatic cleanup
     await m.delete()
 
-# ----------------- Startup -----------------
-async def main():
-    await bot.start()
-    # Notify admin
+# ---------------- Admin Notification ----------------
+@bot.on_message(filters.private & filters.command("admin_notify"))
+async def notify_admin_command(_, msg):
+    if msg.from_user.id == ADMIN_ID:
+        await msg.reply_text("✅ Admin notification test")
+
+async def notify_admin_on_start():
     try:
         await bot.send_message(ADMIN_ID, "🔄 Bot restarted and is now online!")
     except Exception as e:
         print(f"Admin notify failed: {e}")
-    print("✅ Bot is running...")
-    await idle()
-    await bot.stop()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+# ----------------- Startup -----------------
+# Register startup task
+bot.start()
+bot.loop.create_task(notify_admin_on_start())
+bot.run()
