@@ -9,7 +9,7 @@ API_ID = int(os.getenv("API_ID", 0))
 API_HASH = os.getenv("API_HASH", "")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 PORT = int(os.getenv("PORT", 8080))
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0)
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
 # Create bot instance
 bot = Client("igdwbot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, workers=50, sleep_threshold=5, in_memory=True)
@@ -42,3 +42,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         print("Bot stopped manually.")
+
