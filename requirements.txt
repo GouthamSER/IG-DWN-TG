@@ -1,8 +1,11 @@
+
+# © COPYRIGHT TO https://github.com/GouthamSER
+# © COPYRIGHT TO https://github.com/GouthamSER
+# © COPYRIGHT TO https://github.com/GouthamSER
+
 pyrogram
 tgcrypto
-requests
-httpx
 aiohttp
-# © COPYRIGHT TO https://github.com/GouthamSER
-# © COPYRIGHT TO https://github.com/GouthamSER
-# © COPYRIGHT TO https://github.com/GouthamSER
+psutil
+httpx
+uvloop
