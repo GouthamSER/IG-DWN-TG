@@ -2,10 +2,8 @@
 # © COPYRIGHT TO https://github.com/GouthamSER
 # © COPYRIGHT TO https://github.com/GouthamSER
 # © COPYRIGHT TO https://github.com/GouthamSER
-
-pyrogram
+pyrogram==2.0.106
 tgcrypto
 aiohttp
 psutil
-httpx
-uvloop
+python-dotenv
