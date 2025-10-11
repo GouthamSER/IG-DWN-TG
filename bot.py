@@ -15,11 +15,14 @@ PORT = int(os.getenv("PORT", "8080"))
 
 bot = Client("insta_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
+COOKIES_FILE = "cookies.txt"  # Optional cookies file
+
+
 # ───────────────────────────────
 async def download_instagram_media(url: str, tmp_dir: str, message: Message):
     """
     Download Instagram media using yt-dlp with progress updates.
-    Returns downloaded file path.
+    Automatically uses cookies.txt if available.
     """
     filename = None
 
@@ -41,6 +44,10 @@ async def download_instagram_media(url: str, tmp_dir: str, message: Message):
         'no_warnings': True
     }
 
+    # Use cookies if file exists
+    if os.path.exists(COOKIES_FILE):
+        ydl_opts['cookiefile'] = COOKIES_FILE
+
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).download([url]))
 
@@ -55,8 +62,8 @@ async def download_instagram_media(url: str, tmp_dir: str, message: Message):
 @bot.on_message(filters.command("start"))
 async def start_cmd(_, message: Message):
     await message.reply_text(
-        "👋 Send me a **public Instagram Reel, Post, or Story link**, "
-        "and I will download it in HD."
+        "👋 Send me a **public or private Instagram Reel, Post, or Story link**, "
+        "and I will download it in HD. Private content requires a valid cookies.txt file."
     )
 
 
