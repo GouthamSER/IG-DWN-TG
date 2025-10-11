@@ -4,7 +4,8 @@
 
 pyrogram==2.0.106
 tgcrypto
-httpx==1.2.3
+httpx
 aiohttp==3.9.0
 asyncio
+
 
