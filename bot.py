@@ -1,3 +1,5 @@
+# GOUTHAMSER ALL RIGHT RESERVED !!!!!!!!!!!!!!
+
 import os
 import math
 import asyncio
@@ -18,7 +20,7 @@ bot = Client("insta_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # ───────────────────────────────
 async def download_instagram_media(insta_url: str):
-    """Fetch downloadable Instagram media URLs using MediaDL API"""
+    """Fetch media list from MediaDL API (async)"""
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             "https://www.mediadl.app/api/download",
@@ -26,12 +28,14 @@ async def download_instagram_media(insta_url: str):
         )
         resp.raise_for_status()
         data = resp.json()
-    return data.get("medias", [])
+    medias = data.get("medias") or data.get("media") or []
+    if not medias:
+        raise Exception("No media found in response")
+    return medias
 
 
-# ───────────────────────────────
 async def _fetch_bytes(url: str, status_msg: Message, media_type: str = "File") -> BytesIO:
-    """Download media with progress bar in Telegram message"""
+    """Download media with progress bar"""
     b_total = 0
     async with httpx.AsyncClient(timeout=60) as clientx:
         r = await clientx.get(url, timeout=60, follow_redirects=True)
@@ -40,7 +44,7 @@ async def _fetch_bytes(url: str, status_msg: Message, media_type: str = "File") 
         bio = BytesIO()
         bio.name = "media.mp4" if media_type.lower() == "video" else "image.jpg"
 
-        async for chunk in r.aiter_bytes(1024 * 32):
+        async for chunk in r.aiter_bytes(32 * 1024):
             bio.write(chunk)
             b_total += len(chunk)
             if total > 0:
@@ -58,20 +62,19 @@ async def _fetch_bytes(url: str, status_msg: Message, media_type: str = "File") 
 async def start_cmd(_, message: Message):
     await message.reply_text(
         "👋 Send me a **public Instagram Reel, Post, or Story link**, "
-        "and I will download it in HD using MediaDL."
+        "and I will download it in HD and send it to you."
     )
 
 
 @bot.on_message(filters.private & filters.text)
-async def instagram_handler(client, message: Message):
+async def handle_link(client, message: Message):
     content = getattr(message, "text", "") or getattr(message, "caption", "")
-    if "instagram.com" not in content.lower():
+    if "instagram.com" not in content:
         return
 
     status_msg = await message.reply(f"🔄 Downloading in HD...\n🔗 {content}")
     try:
         medias = await download_instagram_media(content)
-
         photos = [m for m in medias if m.get("type", "").lower() in ("photo", "image")]
         videos = [m for m in medias if m.get("type", "").lower() == "video"]
 
@@ -91,7 +94,6 @@ async def instagram_handler(client, message: Message):
 
         MAX_GROUP = 10
 
-        # Send photo media group
         if photos and not videos and len(photos) <= MAX_GROUP:
             media_group = [
                 InputMediaPhoto(m["url"], caption="📸 Downloaded from Instagram!" if i == 0 else None)
@@ -105,7 +107,6 @@ async def instagram_handler(client, message: Message):
                     for i, m in enumerate(photos)
                 ])
 
-        # Send video media group
         elif videos and not photos and len(videos) <= MAX_GROUP:
             media_group = [
                 InputMediaVideo(m["url"], caption="🎥 Downloaded from Instagram!" if i == 0 else None)
@@ -118,17 +119,15 @@ async def instagram_handler(client, message: Message):
                     safe_send_video(message.chat.id, m["url"], caption="🎥 Downloaded from Instagram!" if i == 0 else None)
                     for i, m in enumerate(videos)
                 ])
-
-        # Send mixed or large groups
         else:
             tasks = []
             for i, m in enumerate(medias):
                 url = m.get("url")
                 t = m.get("type", "").lower()
-                cap = "🎥 Downloaded from Instagram!" if t=="video" and i==0 else None
-                if t in ("photo", "image") and i==0:
+                cap = "🎥 Downloaded from Instagram!" if t == "video" and i == 0 else None
+                if t in ("photo", "image") and i == 0:
                     cap = "📸 Downloaded from Instagram!"
-                if t=="video":
+                if t == "video":
                     tasks.append(safe_send_video(message.chat.id, url, caption=cap))
                 elif t in ("photo", "image"):
                     tasks.append(safe_send_photo(message.chat.id, url, caption=cap))
@@ -161,3 +160,5 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.create_task(aiohttp_server())
     bot.run()
+
+# GOUTHAMSER ALL RIGHT RESERVED !!!!!!!!!!!!!!
