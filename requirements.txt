@@ -5,8 +5,4 @@
 pyrogram
 tgcrypto
 httpx
-asyncio
-yt-dlp
 aiohttp
-
-
