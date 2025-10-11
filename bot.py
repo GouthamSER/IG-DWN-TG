@@ -1,11 +1,11 @@
 import os
-import httpx
 import asyncio
 import tempfile
 import shutil
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from aiohttp import web
+import yt_dlp
 
 # ───────────────────────────────
 API_ID = int(os.getenv("API_ID", "12345"))
@@ -13,51 +13,50 @@ API_HASH = os.getenv("API_HASH", "your_api_hash")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_bot_token")
 PORT = int(os.getenv("PORT", "8080"))
 
-MEDIA_DL_API = "https://www.mediadl.app/api/ajaxSearch"
-
 bot = Client("insta_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-
 # ───────────────────────────────
-async def fetch_media(insta_url: str):
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(
-            MEDIA_DL_API,
-            data={"q": insta_url},
-            headers={"User-Agent": "Mozilla/5.0"}
-        )
-        resp.raise_for_status()
-        return resp.json()
+async def download_instagram_media(url: str, tmp_dir: str, message: Message):
+    """
+    Download Instagram media using yt-dlp with progress updates.
+    Returns downloaded file path.
+    """
+    filename = None
 
+    def progress_hook(d):
+        if d['status'] == 'downloading':
+            total = d.get('total_bytes') or d.get('total_bytes_estimate')
+            downloaded = d.get('downloaded_bytes', 0)
+            if total:
+                percent = int(downloaded * 100 / total)
+                asyncio.create_task(message.edit_text(f"⬇️ Downloading... {percent}%"))
+        elif d['status'] == 'finished':
+            asyncio.create_task(message.edit_text("✅ Download complete!"))
 
-async def download_file(url: str, tmp_dir: str, message: Message) -> str:
-    fname = url.split("?")[0].split("/")[-1]
-    path = os.path.join(tmp_dir, fname)
+    ydl_opts = {
+        'format': 'best',
+        'outtmpl': os.path.join(tmp_dir, '%(title)s.%(ext)s'),
+        'progress_hooks': [progress_hook],
+        'quiet': True,
+        'no_warnings': True
+    }
 
-    async with httpx.AsyncClient(timeout=None, follow_redirects=True) as client:
-        r = await client.stream("GET", url)
-        total = int(r.headers.get("Content-Length", 0))
-        downloaded = 0
-        chunk_size = 1024 * 32
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).download([url]))
 
-        with open(path, "wb") as f:
-            async for chunk in r.aiter_bytes(chunk_size):
-                f.write(chunk)
-                downloaded += len(chunk)
-                if total > 0:
-                    progress = int(downloaded * 100 / total)
-                    try:
-                        await message.edit_text(f"⬇️ Downloading... {progress}%")
-                    except:
-                        pass
-    return path
+    # Get downloaded file path
+    files = os.listdir(tmp_dir)
+    if files:
+        filename = os.path.join(tmp_dir, files[0])
+    return filename
 
 
 # ───────────────────────────────
 @bot.on_message(filters.command("start"))
 async def start_cmd(_, message: Message):
     await message.reply_text(
-        "👋 Send a **public Instagram Reel, Post, or Story link**, and I will download it in HD."
+        "👋 Send me a **public Instagram Reel, Post, or Story link**, "
+        "and I will download it in HD."
     )
 
 
@@ -67,32 +66,23 @@ async def insta_handler(_, message: Message):
     progress_msg = await message.reply_text("⬇️ Starting download...")
 
     try:
-        data = await fetch_media(message.text)
-        media_list = data.get("links") or data.get("data") or []
-
-        if not media_list:
-            await progress_msg.edit_text("❌ No media found.")
+        file_path = await download_instagram_media(message.text, tmp, progress_msg)
+        if not file_path:
+            await progress_msg.edit_text("❌ Failed to download media.")
             return
 
-        for m in media_list:
-            media_url = m.get("url") if isinstance(m, dict) else m
-            if not media_url:
-                continue
-
-            filepath = await download_file(media_url, tmp, progress_msg)
-
-            # Send file
-            if filepath.lower().endswith((".mp4", ".mov", ".mkv")):
-                await message.reply_video(video=filepath)
-            elif filepath.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-                await message.reply_photo(photo=filepath)
-            else:
-                await message.reply_document(document=filepath)
+        # Send file
+        if file_path.lower().endswith(('.mp4', '.mov', '.mkv')):
+            await message.reply_video(video=file_path)
+        elif file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+            await message.reply_photo(photo=file_path)
+        else:
+            await message.reply_document(document=file_path)
 
         await progress_msg.delete()
 
     except Exception as e:
-        await progress_msg.edit_text(f"❌ Failed to download media.\n{e}")
+        await progress_msg.edit_text(f"❌ Error: {e}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
