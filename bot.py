@@ -1,118 +1,91 @@
 import os
-import psutil
-import shutil
 import aiohttp
-import uuid
+import asyncio
+import tempfile
+import shutil
 from pyrogram import Client, filters
+from pyrogram.types import Message
 
-# ----------------- Config -----------------
-API_ID = int(os.getenv("API_ID", 0))
-API_HASH = os.getenv("API_HASH", "")
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
+API_ID = int(os.getenv("API_ID", "12345"))
+API_HASH = os.getenv("API_HASH", "your_api_hash")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "123456:ABC-DEF")
 
-# Folder to store downloads
-DOWNLOAD_DIR = "downloads"
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+# Telegram Client
+app = Client("insta_api_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-bot = Client("insta_dl_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# ---------- Instagram API URL ----------
+# Many free APIs exist; this one is stable and public
+API_URL = "https://instagram-api.savetube.me/api/instagram/media"
 
-# ---------------- Helper Functions ----------------
-def get_system_status() -> str:
-    cpu = psutil.cpu_percent(interval=1)
-    ram = psutil.virtual_memory().percent
-    total, used, free = shutil.disk_usage("/")
-    storage = used / total * 100
-    return f"⚙️ CPU: {cpu}% | 💾 RAM: {ram}% | 🗃️ Storage: {storage:.2f}%"
 
-def measure_ping() -> str:
-    import time
-    start = time.time()
-    end = time.time()
-    return f"Pong! 🏓 {(end - start) * 1000:.0f} ms"
+async def get_instagram_media(url: str):
+    """Fetch downloadable media links using a public API."""
+    params = {"url": url}
+    async with aiohttp.ClientSession() as session:
+        async with session.get(API_URL, params=params) as resp:
+            if resp.status != 200:
+                raise Exception(f"API error: {resp.status}")
+            data = await resp.json()
+            return data
 
-async def download_instagram_video(url: str, msg=None) -> str | None:
-    """
-    Async download Instagram video with live progress.
-    Unique filename to allow multiple simultaneous downloads.
-    """
-    try:
-        if "instagram.com" not in url:
-            return None
 
-        api_url = f"https://ssinstagram.com/api/convert?url={url}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url) as resp:
-                data = await resp.json()
-                video_url = data['url'][0]['url']
+async def download_file(session, url, tmp_dir):
+    """Download media file asynchronously."""
+    filename = url.split("?")[0].split("/")[-1]
+    filepath = os.path.join(tmp_dir, filename)
+    async with session.get(url) as resp:
+        if resp.status != 200:
+            raise Exception("Download failed")
+        with open(filepath, "wb") as f:
+            f.write(await resp.read())
+    return filepath
 
-            # Unique filename
-            filename = os.path.join(DOWNLOAD_DIR, f"{uuid.uuid4().hex}.mp4")
 
-            async with session.get(video_url) as vid_resp:
-                total_size = int(vid_resp.headers.get("Content-Length", 0))
-                downloaded = 0
-                chunk_size = 1024 * 1024  # 1 MB
-
-                with open(filename, "wb") as f:
-                    async for chunk in vid_resp.content.iter_chunked(chunk_size):
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if msg and total_size > 0:
-                            percent = downloaded / total_size * 100
-                            await msg.edit_text(f"📥 Downloading video: {percent:.1f}%")
-        return filename
-
-    except Exception as e:
-        if msg:
-            await msg.edit_text(f"❌ Download failed: {e}")
-        return None
-
-# ---------------- Commands ----------------
-@bot.on_message(filters.private & filters.command("start"))
-async def start(_, msg):
-    await msg.reply_text(
-        "👋 Hi! Send me any Instagram video link and I’ll send you the HD video!\n\n"
-        "Commands:\n/ping\n/status"
+@app.on_message(filters.command("start"))
+async def start(_, message: Message):
+    await message.reply_text(
+        "👋 Send me any **public Instagram** reel, post, or story link.\n\n"
+        "I’ll fetch and send it in HD (no login needed)."
     )
 
-@bot.on_message(filters.private & filters.command("ping"))
-async def ping(_, msg):
-    await msg.reply_text(measure_ping())
 
-@bot.on_message(filters.private & filters.command("status"))
-async def status(_, msg):
-    await msg.reply_text(get_system_status())
+@app.on_message(filters.regex(r"(https?://(www\.)?instagram\.com[^\s]+)"))
+async def instagram_dl(_, message: Message):
+    url = message.matches[0].group(1)
+    await message.reply_text("🔍 Fetching media from Instagram... Please wait.")
+    tmp_dir = tempfile.mkdtemp(prefix="instadl_")
 
-@bot.on_message(filters.private & ~filters.command(["start", "ping", "status"]))
-async def handle_instagram(_, msg):
-    url = msg.text.strip()
-    if "instagram.com" not in url:
-        return await msg.reply_text("❌ Please send a valid Instagram URL.")
-
-    m = await msg.reply_text("📥 Starting download...")
-    filename = await download_instagram_video(url, m)
-    if not filename:
-        return
-
-    await msg.reply_video(filename, caption="✅ Here’s your HD video!")
-    os.remove(filename)  # automatic cleanup
-    await m.delete()
-
-# ---------------- Admin Notification ----------------
-@bot.on_message(filters.private & filters.command("admin_notify"))
-async def notify_admin_command(_, msg):
-    if msg.from_user.id == ADMIN_ID:
-        await msg.reply_text("✅ Admin notification test")
-
-async def notify_admin_on_start():
     try:
-        await bot.send_message(ADMIN_ID, "🔄 Bot restarted and is now online!")
-    except Exception as e:
-        print(f"Admin notify failed: {e}")
+        data = await get_instagram_media(url)
 
-# ----------------- Startup -----------------
-# Register startup task
-bot.start()
-bot.loop.create_task(notify_admin_on_start())
-bot.run()
+        # Check valid response
+        if not data or "data" not in data or len(data["data"]) == 0:
+            await message.reply_text("❌ Could not fetch media. Maybe the post is private.")
+            return
+
+        async with aiohttp.ClientSession() as session:
+            for item in data["data"]:
+                media_url = item.get("url")
+                media_type = item.get("type", "")
+                if not media_url:
+                    continue
+
+                filepath = await download_file(session, media_url, tmp_dir)
+
+                # Send based on type
+                if "video" in media_type:
+                    await message.reply_video(video=filepath, caption="🎥 Instagram Video")
+                elif "image" in media_type:
+                    await message.reply_photo(photo=filepath, caption="📸 Instagram Photo")
+                else:
+                    await message.reply_document(document=filepath, caption="📎 Instagram Media")
+
+    except Exception as e:
+        await message.reply_text(f"⚠️ Error: {e}")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    print("Bot running...")
+    app.run()
