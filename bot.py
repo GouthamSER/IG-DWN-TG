@@ -34,10 +34,14 @@ async def fetch_media(insta_url: str):
 async def download_file(session: aiohttp.ClientSession, media_url: str, tmp_dir: str, message: Message):
     fname = media_url.split("?")[0].split("/")[-1]
     path = os.path.join(tmp_dir, fname)
-    async with session.get(media_url) as resp:
+
+    async with session.get(media_url, timeout=60, allow_redirects=True) as resp:
+        if resp.status != 200:
+            raise Exception(f"Download failed: {resp.status}")
         total = int(resp.headers.get("Content-Length", 0))
         downloaded = 0
         chunk_size = 1024 * 32
+
         with open(path, "wb") as f:
             async for chunk in resp.content.iter_chunked(chunk_size):
                 f.write(chunk)
@@ -113,3 +117,4 @@ if __name__ == "__main__":
     loop.create_task(aiohttp_server())
     # Run Pyrogram bot (blocking)
     bot.run()
+
