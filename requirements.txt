@@ -2,6 +2,7 @@
 # © COPYRIGHT TO https://github.com/GouthamSER
 # © COPYRIGHT TO https://github.com/GouthamSER
 # © COPYRIGHT TO https://github.com/Goutham
-pyrogram 
-tgcrypto 
+pyrogram==2.0.106
+tgcrypto
 aiohttp
+asyncio
