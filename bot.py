@@ -1,5 +1,3 @@
-# GOUTHAMSER ALL RIGHT RESERVED !!!!!!!!!!!!!!
-
 import os
 import math
 import asyncio
@@ -9,7 +7,6 @@ from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
 import httpx
 from aiohttp import web
 
-# ───────────────────────────────
 API_ID = int(os.getenv("API_ID", "12345"))
 API_HASH = os.getenv("API_HASH", "your_api_hash")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_bot_token")
@@ -17,8 +14,6 @@ PORT = int(os.getenv("PORT", "8080"))
 
 bot = Client("insta_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-
-# ───────────────────────────────
 async def download_instagram_media(insta_url: str):
     """Fetch media list from MediaDL API (async)"""
     async with httpx.AsyncClient(timeout=30) as client:
@@ -33,38 +28,25 @@ async def download_instagram_media(insta_url: str):
         raise Exception("No media found in response")
     return medias
 
-
 async def _fetch_bytes(url: str, status_msg: Message, media_type: str = "File") -> BytesIO:
-    """Download media with progress bar"""
-    b_total = 0
+    """Download media without progress bar"""
     async with httpx.AsyncClient(timeout=60) as clientx:
         r = await clientx.get(url, timeout=60, follow_redirects=True)
         r.raise_for_status()
-        total = int(r.headers.get("Content-Length", 0))
         bio = BytesIO()
         bio.name = "media.mp4" if media_type.lower() == "video" else "image.jpg"
 
         async for chunk in r.aiter_bytes(32 * 1024):
             bio.write(chunk)
-            b_total += len(chunk)
-            if total > 0:
-                percent = math.floor(b_total * 100 / total)
-                try:
-                    await status_msg.edit(f"⬇️ Downloading {media_type}... {percent}%")
-                except:
-                    pass
         bio.seek(0)
         return bio
 
-
-# ───────────────────────────────
 @bot.on_message(filters.command("start"))
 async def start_cmd(_, message: Message):
     await message.reply_text(
         "👋 Send me a **public Instagram Reel, Post, or Story link**, "
         "and I will download it in HD and send it to you."
     )
-
 
 @bot.on_message(filters.private & filters.text)
 async def handle_link(client, message: Message):
@@ -138,8 +120,6 @@ async def handle_link(client, message: Message):
     except Exception as e:
         await status_msg.edit(f"❌ Failed: {e}\n🔗 {content}")
 
-
-# ───────────────────────────────
 async def aiohttp_server():
     async def index(request):
         return web.Response(text="✅ Bot is alive!", content_type="text/plain")
@@ -154,11 +134,7 @@ async def aiohttp_server():
     while True:
         await asyncio.sleep(3600)
 
-
-# ───────────────────────────────
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.create_task(aiohttp_server())
     bot.run()
-
-# GOUTHAMSER ALL RIGHT RESERVED !!!!!!!!!!!!!!
