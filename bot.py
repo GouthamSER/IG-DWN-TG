@@ -37,13 +37,20 @@ async def download_instagram_media(insta_url: str):
 # ============================
 # 🧰 Helper Functions
 # ============================
-def trim_caption(caption: str, limit: int = 1024) -> str:
-    """Trim caption to Telegram's 1024-char limit."""
+def trim_caption(caption: str, footer: str = "\n\n📥 Downloaded from Instagram") -> str:
+    """Ensure total caption ≤ 1024 chars (Telegram limit)."""
     if not caption:
-        return ""
-    if len(caption) > limit:
-        return caption[:1000].rstrip() + "… [truncated]"
-    return caption
+        return footer.strip()
+
+    caption = caption.strip()
+    footer = footer.strip()
+    max_len = 1024
+
+    # Reserve space for footer and possible truncation note
+    safe_len = max_len - len(footer) - 15
+    if len(caption) > safe_len:
+        caption = caption[:safe_len].rstrip() + "… [truncated]"
+    return f"{caption}\n\n{footer}"
 
 async def _fetch_bytes(url: str, media_type: str = "File") -> BytesIO:
     async with httpx.AsyncClient(timeout=60) as clientx:
@@ -77,7 +84,9 @@ async def handle_link(client, message: Message):
 
     # ✅ Only allow Instagram URLs
     if not any(domain in content for domain in ["instagram.com", "www.instagram.com", "instagr.am"]):
-        await message.reply_text("⚠️ Please send a valid **Instagram link** only!\nExample:\n`https://www.instagram.com/reel/...`")
+        await message.reply_text(
+            "⚠️ Please send a valid **Instagram link** only!\nExample:\n`https://www.instagram.com/reel/...`"
+        )
         return
 
     status_msg = await message.reply(f"🔄 Downloading in HD...\n🔗 {content}")
@@ -86,12 +95,8 @@ async def handle_link(client, message: Message):
         photos = [m for m in medias if m.get("type", "").lower() in ("photo", "image")]
         videos = [m for m in medias if m.get("type", "").lower() == "video"]
 
-        # 🧾 Prepare trimmed caption
-        trimmed_caption = trim_caption(original_caption)
-        first_caption = (
-            f"{trimmed_caption}\n\n📥 Downloaded from Instagram"
-            if trimmed_caption else "📥 Downloaded from Instagram"
-        )
+        # 🧾 Prepare safely trimmed caption
+        first_caption = trim_caption(original_caption)
 
         async def safe_send_photo(chat_id, url, caption=None):
             try:
@@ -119,7 +124,7 @@ async def handle_link(client, message: Message):
             ]
             try:
                 await client.send_media_group(chat_id=message.chat.id, media=media_group)
-            except:
+            except Exception:
                 await asyncio.gather(*[
                     safe_send_photo(message.chat.id, m["url"], caption=first_caption if i == 0 else None)
                     for i, m in enumerate(photos)
@@ -135,7 +140,7 @@ async def handle_link(client, message: Message):
             ]
             try:
                 await client.send_media_group(chat_id=message.chat.id, media=media_group)
-            except:
+            except Exception:
                 await asyncio.gather(*[
                     safe_send_video(message.chat.id, m["url"], caption=first_caption if i == 0 else None)
                     for i, m in enumerate(videos)
