@@ -1,7 +1,7 @@
 import os
 import math
 import asyncio
-import httpx # Import httpx here for specific exception handling
+import httpx 
 from io import BytesIO
 from pyrogram import Client, filters
 from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
@@ -18,24 +18,34 @@ PORT = int(os.getenv("PORT", "8080"))
 bot = Client("insta_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # ============================
-# 📥 Download Instagram Media
+# 📥 Download Instagram Media - USING NEW API (fastdl.app)
 # ============================
 async def download_instagram_media(insta_url: str):
+    # This API uses a GET request with the URL as a query parameter
+    DOWNLOAD_API_URL = "https://fastdl.app/api/json"
+    
+    # Optional headers to mimic a browser request
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+        "Referer": "https://fastdl.app/"
+    }
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://www.mediadl.app/api/download",
-                json={"url": insta_url, "hd": True}
+            resp = await client.get(
+                DOWNLOAD_API_URL,
+                params={"url": insta_url},
+                headers=headers
             )
+            
             # Raise an exception for 4xx or 5xx status codes
             resp.raise_for_status() 
             data = resp.json()
 
     except httpx.HTTPStatusError as e:
-        # Handle 4xx/5xx errors specifically
         status_code = e.response.status_code
-        if status_code == 502:
-            raise Exception(f"Download API failed (502 Bad Gateway). The external service might be down. Please try again later.")
+        if status_code in (500, 502, 503):
+            raise Exception(f"Download API failed ({status_code}). The external service is likely down or overloaded.")
         elif status_code == 404:
             raise Exception("Instagram media not found or is private.")
         else:
@@ -46,13 +56,19 @@ async def download_instagram_media(insta_url: str):
         # Catch general errors like JSON decoding issues
         raise Exception(f"An unexpected error occurred during download: {e}")
 
-    medias = data.get("medias") or data.get("media") or []
-    caption = data.get("title") or data.get("caption") or ""
-
+    # The new API's media is often under the 'media' key
+    medias = data.get("media") or []
+    caption = data.get("caption") or ""
+    
     if not medias:
-        # Check if the API returned an error message in the body
-        error_message = data.get("error") or "No media found in response."
-        raise Exception(error_message)
+        # Check if the API returned an explicit error
+        error_message = data.get("error") or data.get("message")
+        
+        if error_message:
+             # Ensure the error is presented as a string
+            raise Exception(str(error_message))
+        else:
+            raise Exception("No media found in the response. It might be a private account or an unsupported link.")
 
     return medias, caption
 
@@ -114,24 +130,34 @@ async def handle_link(client, message: Message):
     status_msg = await message.reply(f"🔄 Downloading in HD...\n🔗 {content}")
     try:
         medias, original_caption = await download_instagram_media(content)
-        photos = [m for m in medias if m.get("type", "").lower() in ("photo", "image")]
-        videos = [m for m in medias if m.get("type", "").lower() == "video"]
+        
+        # New API can sometimes return a single item as a dict, convert to list if necessary
+        if isinstance(medias, dict):
+             medias = [medias]
+             
+        # Map media from new API structure. fastdl uses 'type' and 'url' (sometimes 'cdn_url')
+        photos = [m for m in medias if m.get("type", "").lower() in ("photo", "image") or 'cdn_url' in m and 'video' not in m.get('type','')]
+        videos = [m for m in medias if m.get("type", "").lower() == "video" or 'video' in m.get('type','')]
 
         # 🧾 Prepare safely trimmed caption
         first_caption = trim_caption(original_caption)
 
         async def safe_send_photo(chat_id, url, caption=None):
+            # Use 'cdn_url' if available, otherwise 'url'
+            final_url = url.get('cdn_url') or url.get('url')
             try:
-                await client.send_photo(chat_id=chat_id, photo=url, caption=caption)
+                await client.send_photo(chat_id=chat_id, photo=final_url, caption=caption)
             except:
-                bio = await _fetch_bytes(url, "Photo")
+                bio = await _fetch_bytes(final_url, "Photo")
                 await client.send_photo(chat_id=chat_id, photo=bio, caption=caption)
 
         async def safe_send_video(chat_id, url, caption=None):
+            # Use 'cdn_url' if available, otherwise 'url'
+            final_url = url.get('cdn_url') or url.get('url')
             try:
-                await client.send_video(chat_id=chat_id, video=url, caption=caption)
+                await client.send_video(chat_id=chat_id, video=final_url, caption=caption)
             except:
-                bio = await _fetch_bytes(url, "Video")
+                bio = await _fetch_bytes(final_url, "Video")
                 await client.send_video(chat_id=chat_id, video=bio, caption=caption)
 
         MAX_GROUP = 10
@@ -141,14 +167,14 @@ async def handle_link(client, message: Message):
         # ============================
         if photos and not videos and len(photos) <= MAX_GROUP:
             media_group = [
-                InputMediaPhoto(m["url"], caption=first_caption if i == 0 else None)
+                InputMediaPhoto(m.get('cdn_url') or m.get('url'), caption=first_caption if i == 0 else None)
                 for i, m in enumerate(photos)
             ]
             try:
                 await client.send_media_group(chat_id=message.chat.id, media=media_group)
             except Exception:
                 await asyncio.gather(*[
-                    safe_send_photo(message.chat.id, m["url"], caption=first_caption if i == 0 else None)
+                    safe_send_photo(message.chat.id, m, caption=first_caption if i == 0 else None)
                     for i, m in enumerate(photos)
                 ])
 
@@ -157,14 +183,14 @@ async def handle_link(client, message: Message):
         # ============================
         elif videos and not photos and len(videos) <= MAX_GROUP:
             media_group = [
-                InputMediaVideo(m["url"], caption=first_caption if i == 0 else None)
+                InputMediaVideo(m.get('cdn_url') or m.get('url'), caption=first_caption if i == 0 else None)
                 for i, m in enumerate(videos)
             ]
             try:
                 await client.send_media_group(chat_id=message.chat.id, media=media_group)
             except Exception:
                 await asyncio.gather(*[
-                    safe_send_video(message.chat.id, m["url"], caption=first_caption if i == 0 else None)
+                    safe_send_video(message.chat.id, m, caption=first_caption if i == 0 else None)
                     for i, m in enumerate(videos)
                 ])
 
@@ -174,13 +200,12 @@ async def handle_link(client, message: Message):
         else:
             tasks = []
             for i, m in enumerate(medias):
-                url = m.get("url")
                 t = m.get("type", "").lower()
                 cap = first_caption if i == 0 else None
                 if t == "video":
-                    tasks.append(safe_send_video(message.chat.id, url, caption=cap))
+                    tasks.append(safe_send_video(message.chat.id, m, caption=cap))
                 elif t in ("photo", "image"):
-                    tasks.append(safe_send_photo(message.chat.id, url, caption=cap))
+                    tasks.append(safe_send_photo(message.chat.id, m, caption=cap))
             await asyncio.gather(*tasks)
 
         await status_msg.edit(f"✅ Done! Sent in HD.\n🔗 {content}")
