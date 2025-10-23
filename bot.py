@@ -1,12 +1,15 @@
 import os
 import math
 import asyncio
+import httpx # Import httpx here for specific exception handling
 from io import BytesIO
 from pyrogram import Client, filters
 from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
-import httpx
 from aiohttp import web
 
+# ============================
+# ⚙️ Configuration
+# ============================
 API_ID = int(os.getenv("API_ID", "12345"))
 API_HASH = os.getenv("API_HASH", "your_api_hash")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_bot_token")
@@ -18,19 +21,38 @@ bot = Client("insta_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 # 📥 Download Instagram Media
 # ============================
 async def download_instagram_media(insta_url: str):
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://www.mediadl.app/api/download",
-            json={"url": insta_url, "hd": True}
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://www.mediadl.app/api/download",
+                json={"url": insta_url, "hd": True}
+            )
+            # Raise an exception for 4xx or 5xx status codes
+            resp.raise_for_status() 
+            data = resp.json()
+
+    except httpx.HTTPStatusError as e:
+        # Handle 4xx/5xx errors specifically
+        status_code = e.response.status_code
+        if status_code == 502:
+            raise Exception(f"Download API failed (502 Bad Gateway). The external service might be down. Please try again later.")
+        elif status_code == 404:
+            raise Exception("Instagram media not found or is private.")
+        else:
+            raise Exception(f"Download API failed with status code {status_code}.")
+    except httpx.ConnectTimeout:
+        raise Exception("Connection timed out while reaching the download service.")
+    except Exception as e:
+        # Catch general errors like JSON decoding issues
+        raise Exception(f"An unexpected error occurred during download: {e}")
 
     medias = data.get("medias") or data.get("media") or []
     caption = data.get("title") or data.get("caption") or ""
 
     if not medias:
-        raise Exception("No media found in response")
+        # Check if the API returned an error message in the body
+        error_message = data.get("error") or "No media found in response."
+        raise Exception(error_message)
 
     return medias, caption
 
@@ -164,6 +186,7 @@ async def handle_link(client, message: Message):
         await status_msg.edit(f"✅ Done! Sent in HD.\n🔗 {content}")
 
     except Exception as e:
+        # The main handler now catches the detailed exceptions from the download function
         await status_msg.edit(f"❌ Failed: {e}\n🔗 {content}")
 
 # ============================
