@@ -4,5 +4,7 @@
 
 pyrogram
 tgcrypto
-httpx
 aiohttp
+httpx
+certifi
+asyncio
