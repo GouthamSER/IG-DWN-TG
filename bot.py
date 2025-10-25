@@ -48,14 +48,14 @@ async def try_api_request(client, url, data, headers):
 
 
 async def download_instagram_media(insta_url: str):
-    """Tries multiple APIs for max reliability."""
-
+    """Try multiple modern APIs to get Instagram media links reliably."""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36"
     }
-    data_payload = {"url": insta_url, "host": "instagram"}
 
     apis = [
+        ("iGram", "https://igram.world/api/"),
+        ("SSInstagram", "https://ssinstagram.com/api/"),
         ("SaveInsta", "https://saveinsta.io/api/ajax/instgram"),
         ("FastDL", "https://fastdl.app/api/ajax/instagram"),
         ("SnapInsta", "https://snapinsta.app/action.php")
@@ -65,22 +65,46 @@ async def download_instagram_media(insta_url: str):
         for name, api_url in apis:
             try:
                 print(f"🔄 Trying {name} API...")
-                data = await try_api_request(client, api_url, data_payload, headers)
-                medias = data.get("media") or data.get("url_list") or []
-                caption = data.get("caption") or data.get("title") or ""
 
-                if medias:
-                    print(f"✅ Success from {name} API.")
-                    return medias, caption
+                if name in ["iGram", "SSInstagram"]:
+                    data = {"url": insta_url}
+                    resp = await client.post(api_url, data=data, headers=headers)
                 else:
-                    raise Exception("Empty media list.")
+                    data = {"url": insta_url, "host": "instagram"}
+                    resp = await client.post(api_url, data=data, headers=headers)
+
+                resp.raise_for_status()
+                json_data = resp.json()
+
+                # Unified parsing logic for all APIs
+                medias = (
+                    json_data.get("media")
+                    or json_data.get("result")
+                    or json_data.get("url_list")
+                    or json_data.get("data")
+                    or []
+                )
+
+                caption = (
+                    json_data.get("caption")
+                    or json_data.get("title")
+                    or json_data.get("desc")
+                    or ""
+                )
+
+                if isinstance(medias, dict):
+                    medias = [medias]
+                if not medias:
+                    raise Exception("Empty media list")
+
+                print(f"✅ Success from {name} API")
+                return medias, caption
+
             except Exception as e:
                 print(f"⚠️ {name} API failed: {e}")
                 continue
 
-    raise Exception("All APIs failed. Media may be private or link unsupported.")
-
-
+    raise Exception("All APIs failed. Media may be private, expired, or unsupported.")
 # ============================
 # 🧰 Helper Functions
 # ============================
@@ -262,3 +286,4 @@ if __name__ == "__main__":
         except:
             pass
         print("Bot stopped cleanly.")
+
