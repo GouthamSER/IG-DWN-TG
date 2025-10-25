@@ -1,10 +1,5 @@
-
-# © COPYRIGHT TO https://github.com/GouthamSER
-# © COPYRIGHT TO https://github.com/GouthamSER
-
-pyrogram
-tgcrypto
-aiohttp
-httpx
-certifi
-asyncio
+pyrogram==2.0.106
+tgcrypto==1.2.5
+aiohttp==3.10.10
+httpx==0.27.2
+certifi==2024.8.30
