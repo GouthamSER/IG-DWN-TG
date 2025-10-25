@@ -1,251 +1,174 @@
 import os
-import math
-import asyncio
-import httpx
-from io import BytesIO
-from pyrogram import Client, filters
-from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
-from aiohttp import web
-import urllib.parse
-import ssl
-import certifi
+import re
 import json
+import httpx
+import asyncio
+import tempfile
+import instaloader
+from io import BytesIO
+from aiohttp import web
+from pyrogram import Client, filters
+from pyrogram.types import Message
 
 # ============================
-# ⚙️ Configuration
+# ⚙️ Config
 # ============================
 API_ID = int(os.getenv("API_ID", "12345"))
 API_HASH = os.getenv("API_HASH", "your_api_hash")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_bot_token")
 PORT = int(os.getenv("PORT", "8080"))
+ADMINS = [int(x) for x in os.getenv("ADMINS", "").split(",") if x.strip().isdigit()]
 
-ADMINS_STR = os.getenv("ADMINS")
-ADMINS = []
-if ADMINS_STR:
-    try:
-        ADMINS = [int(a.strip()) for a in ADMINS_STR.split(',') if a.strip().isdigit()]
-    except ValueError:
-        print("WARNING: Could not parse ADMINS env var. Use comma-separated integers.")
-
-bot = Client("insta_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-ssl_context = ssl.create_default_context(cafile=certifi.where())
+bot = Client("insta_dl_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # ============================
-# 📥 Download Helpers (multi-API retry)
+# 📥 Downloader Function
 # ============================
-
-async def try_api_request(client, url, data, headers):
-    """Try POST with SSL verification."""
-    try:
-        resp = await client.post(url, data=data, headers=headers)
-        resp.raise_for_status()
-        try:
-            return resp.json()
-        except json.JSONDecodeError:
-            raise Exception("Invalid JSON format returned.")
-    except Exception as e:
-        raise Exception(str(e))
-
-
 async def download_instagram_media(insta_url: str):
-    """Try multiple modern APIs to get Instagram media links reliably."""
+    """
+    Tries multiple APIs, then falls back to Instaloader if all fail.
+    Returns (medias, caption)
+    """
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36"
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/128.0.0.0 Safari/537.36"
+        )
     }
 
-    apis = [
-        ("iGram", "https://igram.world/api/"),
-        ("SSInstagram", "https://ssinstagram.com/api/"),
-        ("SaveInsta", "https://saveinsta.io/api/ajax/instgram"),
-        ("FastDL", "https://fastdl.app/api/ajax/instagram"),
-        ("SnapInsta", "https://snapinsta.app/action.php")
-    ]
+    async with httpx.AsyncClient(timeout=40, follow_redirects=True) as client:
+        # 1️⃣ FASTDL
+        try:
+            print("🔹 Trying FastDL...")
+            r = await client.post("https://fastdl.app/action.php", data={"url": insta_url}, headers=headers)
+            r.raise_for_status()
+            text = r.text
+            match = re.search(r"(\{.*\"url\".*\})", text)
+            if match:
+                data = json.loads(match.group(1))
+                medias = []
+                if "url" in data:
+                    medias.append({"url": data["url"], "type": "video" if ".mp4" in data["url"] else "photo"})
+                elif "links" in data:
+                    for l in data["links"]:
+                        medias.append({"url": l["url"], "type": "video" if ".mp4" in l["url"] else "photo"})
+                if medias:
+                    return medias, data.get("title", "")
+            raise Exception("FastDL returned no usable data.")
+        except Exception as e:
+            print(f"⚠️ FastDL failed: {e}")
 
-    async with httpx.AsyncClient(timeout=40, verify=ssl_context) as client:
-        for name, api_url in apis:
-            try:
-                print(f"🔄 Trying {name} API...")
+        # 2️⃣ SNAPINSTA
+        try:
+            print("🔹 Trying SnapInsta...")
+            r = await client.post("https://snapinsta.app/action.php", data={"url": insta_url}, headers=headers)
+            r.raise_for_status()
+            text = r.text
+            match = re.search(r"(\{.*\"url\".*\})", text)
+            if match:
+                data = json.loads(match.group(1))
+                medias = []
+                if "url" in data:
+                    medias.append({"url": data["url"], "type": "video" if ".mp4" in data["url"] else "photo"})
+                elif "links" in data:
+                    for l in data["links"]:
+                        medias.append({"url": l["url"], "type": "video" if ".mp4" in l["url"] else "photo"})
+                if medias:
+                    return medias, data.get("title", "")
+            raise Exception("SnapInsta returned no usable data.")
+        except Exception as e:
+            print(f"⚠️ SnapInsta failed: {e}")
 
-                if name in ["iGram", "SSInstagram"]:
-                    data = {"url": insta_url}
-                    resp = await client.post(api_url, data=data, headers=headers)
-                else:
-                    data = {"url": insta_url, "host": "instagram"}
-                    resp = await client.post(api_url, data=data, headers=headers)
+        # 3️⃣ IGRAM
+        try:
+            print("🔹 Trying iGram...")
+            r = await client.post("https://igram.world/api/", data={"url": insta_url}, headers=headers)
+            r.raise_for_status()
+            j = r.json()
+            urls = j.get("url_list") or []
+            if urls:
+                medias = [{"url": u, "type": "video" if ".mp4" in u else "photo"} for u in urls]
+                return medias, j.get("desc", "")
+            raise Exception("iGram returned no usable data.")
+        except Exception as e:
+            print(f"⚠️ iGram failed: {e}")
 
-                resp.raise_for_status()
-                json_data = resp.json()
+    # 4️⃣ INSTALOADER (final fallback)
+    try:
+        print("🔹 Using Instaloader fallback...")
+        loader = instaloader.Instaloader(dirname_pattern=tempfile.gettempdir(), save_metadata=False)
+        shortcode = re.search(r"/(p|reel|tv)/([^/?]+)", insta_url)
+        if not shortcode:
+            raise Exception("Invalid Instagram link format.")
+        shortcode = shortcode.group(2)
+        post = instaloader.Post.from_shortcode(loader.context, shortcode)
+        medias = []
+        if post.is_video:
+            medias.append({"url": post.video_url, "type": "video"})
+        else:
+            medias.append({"url": post.url, "type": "photo"})
+        return medias, post.caption or ""
+    except Exception as e:
+        print(f"⚠️ Instaloader failed: {e}")
+        raise Exception("All APIs (FastDL, SnapInsta, iGram, Instaloader) failed.")
 
-                # Unified parsing logic for all APIs
-                medias = (
-                    json_data.get("media")
-                    or json_data.get("result")
-                    or json_data.get("url_list")
-                    or json_data.get("data")
-                    or []
-                )
-
-                caption = (
-                    json_data.get("caption")
-                    or json_data.get("title")
-                    or json_data.get("desc")
-                    or ""
-                )
-
-                if isinstance(medias, dict):
-                    medias = [medias]
-                if not medias:
-                    raise Exception("Empty media list")
-
-                print(f"✅ Success from {name} API")
-                return medias, caption
-
-            except Exception as e:
-                print(f"⚠️ {name} API failed: {e}")
-                continue
-
-    raise Exception("All APIs failed. Media may be private, expired, or unsupported.")
 # ============================
-# 🧰 Helper Functions
+# 🧠 Caption Trim
 # ============================
-def trim_caption(caption: str, footer: str = "\n\n📥 Downloaded from Instagram") -> str:
-    if not caption:
-        return footer.strip()
-    caption = caption.strip()
+def trim_caption(caption, footer="\n\n📥 Downloaded via InstaDL Bot"):
+    caption = (caption or "").strip()
     footer = footer.strip()
     max_len = 1024
-    safe_len = max_len - len(footer) - 15
+    safe_len = max_len - len(footer) - 5
     if len(caption) > safe_len:
-        caption = caption[:safe_len].rstrip() + "… [truncated]"
-    return f"{caption}\n\n{footer}"
-
-
-async def _fetch_bytes(url: str, media_type: str = "File") -> BytesIO:
-    async with httpx.AsyncClient(timeout=60, verify=ssl_context) as clientx:
-        r = await clientx.get(url, timeout=60, follow_redirects=True)
-        r.raise_for_status()
-        bio = BytesIO()
-        bio.name = "media.mp4" if media_type.lower() == "video" else "image.jpg"
-        async for chunk in r.aiter_bytes(32 * 1024):
-            bio.write(chunk)
-        bio.seek(0)
-        return bio
-
+        caption = caption[:safe_len] + "…"
+    return f"{caption}\n{footer}" if caption else footer
 
 # ============================
-# 🧠 Commands
+# 🚀 Commands
 # ============================
 @bot.on_message(filters.command("start"))
-async def start_cmd(_, message: Message):
-    await message.reply_text(
-        "👋 Send me a **public Instagram Reel, Post, or Story link**, "
-        "and I’ll download it in HD **with the original caption**.\n\n"
-        "⚠️ Only Instagram links are supported!"
+async def start_cmd(_, m: Message):
+    await m.reply_text(
+        "👋 Send me a **public Instagram link** (Reel, Post, Video, Carousel).\n\n"
+        "I'll try multiple download methods and send it in HD! 🔥"
     )
 
-
 # ============================
-# ⚙️ Main Instagram Handler
+# 📸 Instagram Handler
 # ============================
 @bot.on_message(filters.private & filters.text)
-async def handle_link(client, message: Message):
-    content = getattr(message, "text", "") or getattr(message, "caption", "")
-    content = content.strip()
-
-    original_content = content
-    try:
-        parsed_url = urllib.parse.urlparse(content)
-        content = parsed_url.scheme + "://" + parsed_url.netloc + parsed_url.path
-    except Exception:
-        content = original_content
-        pass
-
-    if not any(domain in content for domain in ["instagram.com", "www.instagram.com", "instagr.am"]):
-        await message.reply_text("⚠️ Please send a valid **Instagram link** only!")
+async def handle_instagram(client, m: Message):
+    url = m.text.strip()
+    if "instagram.com" not in url:
+        await m.reply_text("⚠️ Please send a valid Instagram link.")
         return
 
-    status_msg = await message.reply(f"🔄 Downloading in HD...\n🔗 {content}")
+    status = await m.reply_text("🔄 Fetching from multiple sources...")
+
     try:
-        medias, original_caption = await download_instagram_media(content)
-
-        if isinstance(medias, dict):
-            medias = [medias]
-
-        photos = [m for m in medias if 'image' in m.get('type', '').lower() or 'jpg' in str(m.get('url', ''))]
-        videos = [m for m in medias if 'video' in m.get('type', '').lower() or 'mp4' in str(m.get('url', ''))]
-        first_caption = trim_caption(original_caption)
-
-        async def safe_send_photo(chat_id, url_dict, caption=None):
-            final_url = url_dict.get('cdn_url') or url_dict.get('url')
-            try:
-                await client.send_photo(chat_id=chat_id, photo=final_url, caption=caption)
-            except:
-                bio = await _fetch_bytes(final_url, "Photo")
-                await client.send_photo(chat_id=chat_id, photo=bio, caption=caption)
-
-        async def safe_send_video(chat_id, url_dict, caption=None):
-            final_url = url_dict.get('cdn_url') or url_dict.get('url')
-            try:
-                await client.send_video(chat_id=chat_id, video=final_url, caption=caption)
-            except:
-                bio = await _fetch_bytes(final_url, "Video")
-                await client.send_video(chat_id=chat_id, video=bio, caption=caption)
-
-        MAX_GROUP = 10
-
-        if photos and not videos and len(photos) <= MAX_GROUP:
-            media_group = [
-                InputMediaPhoto(m.get('cdn_url') or m.get('url'), caption=first_caption if i == 0 else None)
-                for i, m in enumerate(photos)
-            ]
-            try:
-                await client.send_media_group(chat_id=message.chat.id, media=media_group)
-            except Exception:
-                await asyncio.gather(*[
-                    safe_send_photo(message.chat.id, m, caption=first_caption if i == 0 else None)
-                    for i, m in enumerate(photos)
-                ])
-
-        elif videos and not photos and len(videos) <= MAX_GROUP:
-            media_group = [
-                InputMediaVideo(m.get('cdn_url') or m.get('url'), caption=first_caption if i == 0 else None)
-                for i, m in enumerate(videos)
-            ]
-            try:
-                await client.send_media_group(chat_id=message.chat.id, media=media_group)
-            except Exception:
-                await asyncio.gather(*[
-                    safe_send_video(message.chat.id, m, caption=first_caption if i == 0 else None)
-                    for i, m in enumerate(videos)
-                ])
-
-        else:
-            tasks = []
-            for i, m in enumerate(medias):
-                t = m.get("type", "").lower()
-                cap = first_caption if i == 0 else None
-                if "video" in t:
-                    tasks.append(safe_send_video(message.chat.id, m, caption=cap))
-                elif "photo" in t or "image" in t:
-                    tasks.append(safe_send_photo(message.chat.id, m, caption=cap))
-            await asyncio.gather(*tasks)
-
-        await status_msg.edit(f"✅ Done! Sent in HD.\n🔗 {content}")
-
+        medias, caption = await download_instagram_media(url)
+        caption = trim_caption(caption)
+        for media in medias:
+            if media["type"] == "video":
+                await client.send_video(m.chat.id, media["url"], caption=caption)
+            else:
+                await client.send_photo(m.chat.id, media["url"], caption=caption)
+        await status.delete()
     except Exception as e:
-        await status_msg.edit(f"❌ Failed: {e}\n🔗 {content}")
-
+        await status.edit(f"❌ Failed: {e}")
 
 # ============================
-# 🌐 AIOHTTP Keep-Alive Server
+# 🌐 Web Server (Koyeb Keepalive)
 # ============================
 async def aiohttp_server():
     async def index(request):
-        return web.Response(text="✅ Bot is alive!", content_type="text/plain")
+        return web.Response(text="✅ InstaDL Bot alive!", content_type="text/plain")
 
-    app_web = web.Application()
-    app_web.router.add_get("/", index)
-    runner = web.AppRunner(app_web)
+    app = web.Application()
+    app.router.add_get("/", index)
+    runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
@@ -253,37 +176,27 @@ async def aiohttp_server():
     while True:
         await asyncio.sleep(3600)
 
-
 # ============================
-# 🚀 Startup Logic
+# 🧩 Main Entry
 # ============================
 async def main():
-    asyncio.create_task(aiohttp_server())
+    web_task = asyncio.create_task(aiohttp_server())
     await bot.start()
 
+    # Notify admins
     if ADMINS:
-        try:
-            bot_info = await bot.get_me()
-            msg = f"🤖 Bot restarted.\nName: @{bot_info.username}\nReady to download!"
-            await asyncio.gather(*[bot.send_message(a, msg) for a in ADMINS])
-        except Exception as e:
-            print("Startup message failed:", e)
+        me = await bot.get_me()
+        text = f"🤖 Bot Online: @{me.username}\n✅ Using FastDL + SnapInsta + iGram + Instaloader"
+        for a in ADMINS:
+            try:
+                await bot.send_message(a, text)
+            except Exception:
+                pass
 
     await asyncio.Future()
 
-
 if __name__ == "__main__":
     try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
+        asyncio.run(main())
     except KeyboardInterrupt:
-        print("Bot stopped manually.")
-    except Exception as e:
-        print("Fatal:", e)
-    finally:
-        try:
-            loop.run_until_complete(bot.stop())
-        except:
-            pass
-        print("Bot stopped cleanly.")
-
+        print("🛑 Bot stopped.")
